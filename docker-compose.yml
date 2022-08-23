@@ -1,0 +1,128 @@
+version: '2'
+services:
+  ngx:
+    image: nginx
+    restart: always
+    privileged: true
+    volumes:
+      - /etc/hosts:/etc/hosts
+      - ./ssl:/etc/nginx/ssl
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      #- ./html:/var/www/html
+    ports:
+      - 7080:80
+      - 7443:443
+    depends_on:
+      - api
+    stdin_open: true
+    tty: true
+
+  postgrest:
+    image: postgrest/postgrest:v9.0.0
+    restart: always
+    privileged: true
+    #ports:
+    #- "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://axelor:axelor@postgresdb:5432/axelor
+      PGRST_DB_SCHEMA: public, dev
+      PGRST_DB_ANON_ROLE: axelor
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://postgrest:3000
+    depends_on:
+      - postgresdb
+
+  postgresdb:
+    image: postgres
+    volumes:
+      - "./postgresql/data:/var/lib/postgresql/data"
+    restart: always
+    ports:
+      - "5555:5432"
+    environment:
+      POSTGRES_DB: axelor
+      POSTGRES_USER: axelor
+      POSTGRES_PASSWORD: axelor
+
+  zipkin:
+    image: "openzipkin/zipkin"
+    ports:
+      - "9411:9411"
+
+  placement:
+    image: "daprio/dapr"
+    command: ["./placement", "-port", "50005"]
+    ports:
+      - "50005:50005"
+
+  redisdb:
+    image: redis
+    restart: always
+
+  api:
+    build: ./api
+    restart: always
+    command: /bin/bash ./start.sh
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./api/C4/:/opt/bpm/C4/
+    environment:
+      - VER=0.0.1
+      - TZ=Asia/Shanghai
+    depends_on:
+      - redisdb
+      - placement
+      - zipkin
+    ports:
+      #- "3303:3303"
+      - "3500:3500"
+      #- "50000:50000"
+  api-dapr:
+    image: "daprio/daprd:edge"
+    command: ["./daprd",
+     "-app-id", "api",
+     "-app-port", "3303",
+     "-dapr-grpc-port", "50000",
+     "-placement-host-address", "placement:50005",
+     "-components-path", "/dapr/components",
+     "-config", "/dapr/config.yaml"]
+    volumes:
+        - "./dapr/:/dapr/"
+    depends_on:
+      - api
+    network_mode: "service:api"
+
+  book:
+    build: ./book
+    restart: always
+    command: /bin/bash ./start.sh
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - ./book/C4/:/opt/bpm/C4/
+    environment:
+      - VER=0.0.1
+      - TZ=Asia/Shanghai
+    depends_on:
+      - redisdb
+      - placement
+      - zipkin
+    #ports:
+      #- "3303:3303"
+      #- "3500:3500"
+      #- "50000:50000"
+  book-dapr:
+    image: "daprio/daprd:edge"
+    command: ["./daprd",
+     "-app-id", "book",
+     "-app-port", "3303",
+     "-dapr-grpc-port", "50000",
+     "-placement-host-address", "placement:50005",
+     "-components-path", "/dapr/components",
+     "-config", "/dapr/config.yaml"]
+    volumes:
+        - "./dapr/:/dapr/"
+    depends_on:
+      - book 
+    network_mode: "service:book"
+      
