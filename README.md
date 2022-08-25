@@ -42,3 +42,18 @@ rule "Stamp"
 docker run --rm -it --net=host -p 3500:3500 daprio/daprd:edge ./daprd -app-id app0x xxxxx yyyyy zzzzz
 curl http://localhost:3500/v1.0/healthz
 </pre>
+
+
+<pre>
+docker plugin install vieux/sshfs
+docker plugin install --grant-all-permissions vieux/sshfs
+
+docker plugin ls
+
+docker volume create --driver vieux/sshfs \
+       -o sshcmd=ateam@redash.feg.cn:/home/ateam \
+       -o password=123456  \
+       sshvolume
+
+docker run --rm -it -v sshvolume:/data nginx ls /data
+</pre>
